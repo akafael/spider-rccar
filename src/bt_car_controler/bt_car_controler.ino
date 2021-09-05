@@ -7,7 +7,6 @@
 
 // Libraries ------------------------------------------------------------------
 
-#include <SoftwareSerial.h>
 #include <elapsedMillis.h>
 
 // Constants ------------------------------------------------------------------
@@ -23,13 +22,10 @@
 
 #define PWD_SIGNAL_OFF 0
 
-#define MAX_SPEED 100
+#define MAX_SPEED 200
 #define TURN_SPEED 100
 
 // Global Vars ----------------------------------------------------------------
-
-//
-SoftwareSerial btSerial(2, 3);
 
 // Timers
 elapsedMillis timerGlobal;
@@ -40,6 +36,19 @@ const int timeStep = 100; // ms
 
 enum CarCommand : char
 {
+  // Change Speed
+  SET_SPEED1 = '1',
+  SET_SPEED2 = '2',
+  SET_SPEED3 = '3',
+  SET_SPEED4 = '4',
+  SET_SPEED5 = '5',
+  SET_SPEED6 = '6',
+  SET_SPEED7 = '7',
+  SET_SPEED8 = '8',
+  SET_SPEED9 = '9',
+  SET_SPEED0 = '0',
+
+  // Move
   MOVE_FRONT = 'F',
   MOVE_FRONT_LEFT = 'G',
   MOVE_FRONT_RIGHT = 'I',
@@ -66,6 +75,7 @@ struct Car
 };
 
 Car CarState;
+int Speed;
 char state;
 
 // Core Functions --------------------------------------------------------------
@@ -76,7 +86,6 @@ char state;
 void setup() {
   
   Serial.begin(9600);
-  btSerial.begin(9600);
 
   pinMode(PINLED, OUTPUT);
   pinMode(PIN_BUZZER, OUTPUT);
@@ -96,6 +105,7 @@ void setup() {
   CarState.Direction = DIRECTION_FRONT;
   CarState.Acceleration = -1;
 
+  Speed = 0;
   state = DO_NOTHING;
 
   // Reset Timers
@@ -111,15 +121,9 @@ void loop() {
     Serial.write( state );
   }
 
-//    if (btSerial.available() > 0) {
-//      state  = btSerial.read();
-//      btSerial.write( state );
-//    }
-
-  //CarState = driverCommand( DO_NOTHING );
   CarState = driverCommand( state );
-  //CarState = testCarDirection();
-
+  //CarState = driverCommand( DO_NOTHING );
+  
   // Send Command to Actuators
   setCarSpeed( CarState.Speed );
   setCarDirection( CarState.Direction );
@@ -156,7 +160,7 @@ void setCarDirection( const char direction)
  */
 void setCarSpeed( const int speed )
 {
-  int pwdSignal = speed;
+  int pwdSignal = (speed <= MAX_SPEED)? speed: MAX_SPEED;
 
   if( speed > 0 )
   {
@@ -184,10 +188,80 @@ Car driverCommand( const char command )
   
   switch( command )
   {
+    case SET_SPEED1:
+    {
+      carCommand.Direction = CarState.Direction;
+      Speed = MAX_SPEED/10;
+    }
+    break;
+
+    case SET_SPEED2:
+    {
+      carCommand.Direction = CarState.Direction;
+      Speed = 2*MAX_SPEED/10;
+    }
+    break;
+
+    case SET_SPEED3:
+    {
+      carCommand.Direction = CarState.Direction;
+      Speed = 3*MAX_SPEED/10;
+    }
+    break;
+
+    case SET_SPEED4:
+    {
+      carCommand.Direction = CarState.Direction;
+      Speed = 4*MAX_SPEED/10;
+    }
+    break;
+
+    case SET_SPEED5:
+    {
+      carCommand.Direction = CarState.Direction;
+      Speed = 5*MAX_SPEED/10;
+    }
+    break;
+
+    case SET_SPEED6:
+    {
+      carCommand.Direction = CarState.Direction;
+      Speed = 6*MAX_SPEED/10;
+    }
+    break;
+
+    case SET_SPEED7:
+    {
+      carCommand.Direction = CarState.Direction;
+      Speed = 7*MAX_SPEED/10;
+    }
+    break;
+
+    case SET_SPEED8:
+    {
+      carCommand.Direction = CarState.Direction;
+      Speed = 8*MAX_SPEED/10;
+    }
+    break;
+
+    case SET_SPEED9:
+    {
+      carCommand.Direction = CarState.Direction;
+      Speed = 9*MAX_SPEED/10;
+    }
+    break;
+
+    case SET_SPEED0:
+    {
+      carCommand.Direction = CarState.Direction;
+      Speed = 0;
+    }
+    break;
+
     case MOVE_FRONT:
     {
       carCommand.Direction = DIRECTION_FRONT;
-      carCommand.Speed = MAX_SPEED;
+      carCommand.Speed = Speed;
       carCommand.Acceleration = 0;
     }
     break;
@@ -195,7 +269,7 @@ Car driverCommand( const char command )
     case MOVE_FRONT_LEFT:
     {
       carCommand.Direction = DIRECTION_LEFT;
-      carCommand.Speed = MAX_SPEED;
+      carCommand.Speed = Speed;
       carCommand.Acceleration = 0;
     }
     break;
@@ -211,7 +285,7 @@ Car driverCommand( const char command )
     case MOVE_FRONT_RIGHT:
     {
       carCommand.Direction = DIRECTION_RIGHT;
-      carCommand.Speed = MAX_SPEED;
+      carCommand.Speed = Speed;
       carCommand.Acceleration = 0;
     }
     break;
@@ -227,7 +301,7 @@ Car driverCommand( const char command )
     case MOVE_BACK:
     {
       carCommand.Direction = DIRECTION_FRONT;
-      carCommand.Speed = -MAX_SPEED;
+      carCommand.Speed = -Speed;
       carCommand.Acceleration = 0;
     }
     break;
@@ -235,7 +309,7 @@ Car driverCommand( const char command )
     case MOVE_BACK_LEFT:
     {
       carCommand.Direction = DIRECTION_LEFT;
-      carCommand.Speed = -MAX_SPEED;
+      carCommand.Speed = -Speed;
       carCommand.Acceleration = 0;
     }
     break;
@@ -243,7 +317,7 @@ Car driverCommand( const char command )
     case MOVE_BACK_RIGHT:
     {
       carCommand.Direction = DIRECTION_RIGHT;
-      carCommand.Speed = -MAX_SPEED;
+      carCommand.Speed = -Speed;
       carCommand.Acceleration = 0;
     }
     break;
