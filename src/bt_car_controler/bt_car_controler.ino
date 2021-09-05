@@ -20,13 +20,29 @@
 #define PIN_MOTOR_FRONT_1 5
 #define PIN_MOTOR_FRONT_2 3
 
-#define PWD_SIGNAL_OFF 255
+#define PWD_SIGNAL_OFF 0
 
 #define MAX_SPEED 100
 
+// Global Vars ----------------------------------------------------------------
+
+// Timers
 elapsedMillis timerGlobal;
 elapsedMillis timerLoop;
 const int timeStep = 100; // ms
+
+enum CarCommand : char
+{
+  MOVE_FRONT = 'F',
+  MOVE_FRONT_LEFT = 'G',
+  MOVE_FRONT_RIGHT = 'I',
+  MOVE_BACK = 'B',
+  MOVE_BACK_LEFT = 'H',
+  MOVE_BACK_RIGHT = 'J',
+  MOVE_RIGHT = 'L',
+  MOVE_LEFT = 'R',
+  DO_NOTHING = 'S',
+};
 
 enum CarDirection : char
 {
@@ -42,12 +58,16 @@ struct Car
   CarDirection Direction;
 };
 
-int speedMotor;
-int speedAcc;
-char carDirection;
+Car CarState;
+const unsigned char SpeedTurn = 100;
 
-unsigned char speedTurn = 100;
+char state;
 
+// Core Functions --------------------------------------------------------------
+
+/**
+ * Setup - Run once at startup
+ */
 void setup() {
   
   Serial.begin(9600);
@@ -65,23 +85,38 @@ void setup() {
   analogWrite(PIN_MOTOR_FRONT_1, PWD_SIGNAL_OFF);
   analogWrite(PIN_MOTOR_FRONT_2, PWD_SIGNAL_OFF);
 
-  // Speed
-  speedAcc = -1;
-  carDirection = DIRECTION_FRONT;
+  // Set Car Start Info
+  CarState.Speed = 0;
+  CarState.Direction = DIRECTION_FRONT;
+  CarState.Acceleration = -1;
+
+  state = '*';
 
   // Reset Timers
   timerGlobal = 0;
 }
 
+/**
+ * Loop - Keep reapeting foreaver
+ */
 void loop() {
   if( timerLoop >= timeStep ) // Control Frequency time
   {
     timerLoop = 0; // Reset Timer
     
-    setCarSpeed( 0 );
-    setCarDirection( DIRECTION_RIGHT, 0 );
+//    if (Serial.available() > 0) {
+//      state  = Serial.read();
+//      Serial.write( state );
+//    }
+//  CarState = driverCommand( state );
 
-    printCarInfo();
+    CarState = testCarSpeed( CarState );
+
+    // Send Command to Actuators
+    setCarSpeed( CarState.Speed );
+    setCarDirection( CarState.Direction );
+
+    printInfo( CarState );
   }
 }
 
@@ -90,17 +125,17 @@ void loop() {
 /**
  * Define direção
  */
-void setCarDirection( const char direction, int speedTurn )
-{
+void setCarDirection( const char direction)
+{ 
   if( direction == DIRECTION_RIGHT )
   {
-    analogWrite(PIN_MOTOR_FRONT_1, -speedTurn);
+    analogWrite(PIN_MOTOR_FRONT_1, -SpeedTurn);
     analogWrite(PIN_MOTOR_FRONT_2, 0);
   }
   else if( direction == DIRECTION_LEFT )
   {
     analogWrite(PIN_MOTOR_FRONT_1, 0);
-    analogWrite(PIN_MOTOR_FRONT_2, -speedTurn);
+    analogWrite(PIN_MOTOR_FRONT_2, -SpeedTurn);
   }
   else
   {
@@ -118,18 +153,18 @@ void setCarSpeed( const int speed )
 
   if( speed > 0 )
   {
-    analogWrite(PIN_MOTOR_BACK_1, -pwdSignal);
-    analogWrite(PIN_MOTOR_BACK_2, PWD_SIGNAL_OFF);
+    analogWrite(PIN_MOTOR_BACK_1, -pwdSignal );
+    analogWrite(PIN_MOTOR_BACK_2, PWD_SIGNAL_OFF );
   }
   else if( speed < 0 )
   {
-    analogWrite(PIN_MOTOR_BACK_1, PWD_SIGNAL_OFF);
-    analogWrite(PIN_MOTOR_BACK_2, pwdSignal);
+    analogWrite(PIN_MOTOR_BACK_1, PWD_SIGNAL_OFF );
+    analogWrite(PIN_MOTOR_BACK_2, pwdSignal );
   }
   else
   {
-    analogWrite(PIN_MOTOR_BACK_1, PWD_SIGNAL_OFF);
-    analogWrite(PIN_MOTOR_BACK_2, PWD_SIGNAL_OFF);
+    analogWrite(PIN_MOTOR_BACK_1, PWD_SIGNAL_OFF );
+    analogWrite(PIN_MOTOR_BACK_2, PWD_SIGNAL_OFF );
   }
 }
 
@@ -142,62 +177,63 @@ Car driverCommand( const char command )
   
   switch( command )
   {
-    case 'F': // Move Front
+    case MOVE_FRONT:
     {
       carCommand.Direction = DIRECTION_FRONT;
       carCommand.Speed = MAX_SPEED;
-      carCommand.Acceleration = speedAcc;
+      carCommand.Acceleration = 0;
     }
     break;
 
-    case 'G': // Move Front Left
+    case MOVE_FRONT_LEFT:
     {
       carCommand.Direction = DIRECTION_LEFT;
       carCommand.Speed = MAX_SPEED;
-      carCommand.Acceleration = speedAcc;
+      carCommand.Acceleration = 0;
     }
     break;
 
-    case 'L': // Move Left
+    case MOVE_LEFT:
     {
       carCommand.Direction = DIRECTION_LEFT;
       carCommand.Speed = 0;
-      carCommand.Acceleration = speedAcc;
+      carCommand.Acceleration = 0;
     }
     break;
 
-    case 'I': // Move Front Right
+    case MOVE_FRONT_RIGHT:
     {
       carCommand.Direction = DIRECTION_RIGHT;
       carCommand.Speed = MAX_SPEED;
-      carCommand.Acceleration = speedAcc;
+      carCommand.Acceleration = 0;
     }
     break;
 
-    case 'R': // Move Right
+    case MOVE_RIGHT:
     {
       carCommand.Direction = DIRECTION_RIGHT;
       carCommand.Speed = 0;
-      carCommand.Acceleration = speedAcc;
+      carCommand.Acceleration = 0;
     }
     break;
 
-    case 'H': // Move Backwards Left
+    case MOVE_BACK_LEFT:
     {
       carCommand.Direction = DIRECTION_LEFT;
       carCommand.Speed = -MAX_SPEED;
-      carCommand.Acceleration = speedAcc;
+      carCommand.Acceleration = 0;
     }
     break;
 
-    case 'J': // Move Backwards Right
+    case MOVE_BACK_RIGHT:
     {
       carCommand.Direction = DIRECTION_RIGHT;
       carCommand.Speed = -MAX_SPEED;
-      carCommand.Acceleration = speedAcc;
+      carCommand.Acceleration = 0;
     }
     break;
 
+    case DO_NOTHING:
     default:
     {
       carCommand.Direction = DIRECTION_FRONT;
@@ -207,17 +243,6 @@ Car driverCommand( const char command )
   }
 
   return carCommand;
-}
-
-void printCarInfo()
-{
-  Serial.print( millis() );
-  Serial.print(",");
-  Serial.print( timerGlobal );
-  Serial.print(",");
-  Serial.print( carDirection );
-  Serial.print(",");
-  Serial.println( speedMotor );
 }
 
 void printInfo( Car carState )
@@ -233,13 +258,57 @@ void printInfo( Car carState )
 
 // Funções para Testes em Geral ----------------------------------------------
 
-void testCarSpeed()
+/**
+ * Speed Sweep from -255 to 255
+ */
+Car testCarSpeed( Car carState )
 {
+  Car carCommand;
+  
   const int maxSpeed = 255;
 
-  // Set Acceleration
-  speedAcc = (speedMotor >= maxSpeed)?-1:(speedMotor < -maxSpeed) ?1:speedAcc;
-  speedMotor += speedAcc;
+  int speedStep;
 
-  setCarSpeed( speedMotor );
+  if( carState.Speed >= maxSpeed)
+  {
+    speedStep = -1;
+  }
+  else if ( carState.Speed < -maxSpeed)
+  {
+    speedStep = 1;
+  }
+  else
+  {
+    speedStep = carState.Acceleration;
+  }
+
+  carCommand.Speed = carState.Speed + speedStep;
+  carCommand.Acceleration = speedStep;
+  carCommand.Direction = DIRECTION_FRONT;
+
+  return carCommand;
+}
+
+/**
+ * Change Direction each 256 ms
+ */
+Car testCarDirection()
+{
+  Car carCommand;
+
+  long int currentTime = millis();
+
+  if( currentTime & 0x100 )
+  {
+    carCommand.Direction = DIRECTION_LEFT;
+  }
+  else
+  {
+    carCommand.Direction = DIRECTION_RIGHT;
+  }
+
+  carCommand.Speed = 0;
+  carCommand.Acceleration = 0;
+
+  return carCommand;
 }
