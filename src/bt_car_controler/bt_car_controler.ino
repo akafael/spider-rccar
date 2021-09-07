@@ -7,23 +7,25 @@
 
 // Libraries ------------------------------------------------------------------
 
+#include <Servo.h>
 #include <elapsedMillis.h>
 
 // Constants ------------------------------------------------------------------
 
-#define PINLED 13
-#define PIN_BUZZER 12
+#define PIN_LED 13
+#define PIN_BUZZER 13
 
-#define PIN_MOTOR_BACK_1 11
-#define PIN_MOTOR_BACK_2 10
+#define PIN_MOTOR_BACK_1 5
+#define PIN_MOTOR_BACK_2 6
+#define PIN_MOTOR_BACK_EN 9
 
-#define PIN_MOTOR_FRONT_1 6
-#define PIN_MOTOR_FRONT_2 5
+#define PIN_MOTOR_FRONT 11
 
-#define PWD_SIGNAL_OFF 0
+#define ANGLE_TURN_CENTER 90
+#define ANGLE_TURN_LEFT 50
+#define ANGLE_TURN_RIGHT 110
 
-#define MAX_SPEED 200
-#define TURN_SPEED 100
+#define MAX_SPEED 100
 
 // Global Vars ----------------------------------------------------------------
 
@@ -31,6 +33,8 @@
 elapsedMillis timerGlobal;
 elapsedMillis timerLoop;
 const int timeStep = 100; // ms
+
+Servo servoFront;
 
 // Car Commands ---------------------------------------------------------------
 
@@ -69,6 +73,7 @@ enum CarDirection : char
 
 struct Car
 {
+  char State;
   int Speed;
   int Acceleration;
   char Direction;
@@ -84,29 +89,31 @@ char state;
  * Setup - Run once at startup
  */
 void setup() {
-  
-  Serial.begin(9600);
-
-  pinMode(PINLED, OUTPUT);
+  // Start PIN
   pinMode(PIN_BUZZER, OUTPUT);
   pinMode(PIN_MOTOR_BACK_1, OUTPUT);
   pinMode(PIN_MOTOR_BACK_2, OUTPUT);
-  pinMode(PIN_MOTOR_FRONT_1, OUTPUT);
-  pinMode(PIN_MOTOR_FRONT_2, OUTPUT);
+  pinMode(PIN_MOTOR_BACK_EN, OUTPUT);
 
-  analogWrite(PIN_MOTOR_BACK_1, PWD_SIGNAL_OFF);
-  analogWrite(PIN_MOTOR_BACK_2, PWD_SIGNAL_OFF);
+  // Turn Motor Off
+  analogWrite(PIN_MOTOR_BACK_1, 0);
+  analogWrite(PIN_MOTOR_BACK_2, 0);
+  analogWrite(PIN_MOTOR_BACK_EN, 0);
 
-  analogWrite(PIN_MOTOR_FRONT_1, PWD_SIGNAL_OFF);
-  analogWrite(PIN_MOTOR_FRONT_2, PWD_SIGNAL_OFF);
+  // Start Servo
+  servoFront.attach(PIN_MOTOR_FRONT);
+  servoFront.write(ANGLE_TURN_CENTER);
 
   // Set Car Start Info
   CarState.Speed = 0;
   CarState.Direction = DIRECTION_FRONT;
   CarState.Acceleration = -1;
 
-  Speed = 0;
+  Speed = MAX_SPEED;
   state = DO_NOTHING;
+
+  // Start Communication
+  Serial.begin(9600);
 
   // Reset Timers
   timerGlobal = 0;
@@ -116,19 +123,25 @@ void setup() {
  * Loop - Keep reapeting foreaver
  */
 void loop() {
-  if (Serial.available() > 0) {
-    state  = Serial.read();
-    Serial.write( state );
-  }
-
-  CarState = driverCommand( state );
-  //CarState = driverCommand( DO_NOTHING );
+  if( timerLoop >= timeStep ) // Control Frequency time
+  {
+    timerLoop = 0; // Reset Timer
   
-  // Send Command to Actuators
-  setCarSpeed( CarState.Speed );
-  setCarDirection( CarState.Direction );
-
-  //printInfo( CarState );
+    if (Serial.available() > 0) {
+      state  = Serial.read();
+      Serial.write( state );
+    }
+  
+    CarState = driverCommand( state );
+    //CarState = driverCommand( DO_NOTHING );
+    //CarState = testCarSpeed( CarState );
+    
+    // Send Command to Actuators
+    setCarSpeed( CarState.Speed );
+    setCarDirection( CarState.Direction );
+  
+    printInfo( CarState );
+  }
 }
 
 // Funções Auxiliares ----------------------------------------------
@@ -140,18 +153,15 @@ void setCarDirection( const char direction)
 { 
   if( direction == DIRECTION_RIGHT )
   {
-    analogWrite(PIN_MOTOR_FRONT_1, TURN_SPEED);
-    analogWrite(PIN_MOTOR_FRONT_2, 0);
+    servoFront.write(ANGLE_TURN_RIGHT);
   }
   else if( direction == DIRECTION_LEFT )
   {
-    analogWrite(PIN_MOTOR_FRONT_1, 0);
-    analogWrite(PIN_MOTOR_FRONT_2, TURN_SPEED);
+    servoFront.write(ANGLE_TURN_LEFT);
   }
   else
   {
-    analogWrite(PIN_MOTOR_FRONT_1, 0);
-    analogWrite(PIN_MOTOR_FRONT_2, 0);
+    servoFront.write(ANGLE_TURN_CENTER);
   }
 }
 
@@ -166,16 +176,19 @@ void setCarSpeed( const int speed )
   {
     analogWrite(PIN_MOTOR_BACK_1, pwdSignal );
     analogWrite(PIN_MOTOR_BACK_2, 0 );
+    analogWrite(PIN_MOTOR_BACK_EN, 255 );
   }
   else if( speed < 0 )
   {
     analogWrite(PIN_MOTOR_BACK_1, 0 );
     analogWrite(PIN_MOTOR_BACK_2, pwdSignal );
+    analogWrite(PIN_MOTOR_BACK_EN, 255 );
   }
   else
   {
     analogWrite(PIN_MOTOR_BACK_1, 0 );
     analogWrite(PIN_MOTOR_BACK_2, 0 );
+    analogWrite(PIN_MOTOR_BACK_EN, 0 );
   }
 }
 
@@ -185,6 +198,7 @@ void setCarSpeed( const int speed )
 Car driverCommand( const char command )
 {
   Car carCommand;
+  carCommand.State = command;
   
   switch( command )
   {
@@ -338,6 +352,8 @@ void printInfo( Car carState )
 {
   Serial.print( millis() );
   Serial.print(",");
+  Serial.print( carState.State );
+  Serial.print(",");
   Serial.print( carState.Direction );
   Serial.print(",");
   Serial.print( carState.Speed );
@@ -348,7 +364,7 @@ void printInfo( Car carState )
 // Funções para Testes em Geral ----------------------------------------------
 
 /**
- * Speed Sweep from -255 to 255
+ * Speed Sweep from -MAX_SPEED to MAX_SPEED
  */
 Car testCarSpeed( Car carState )
 {
@@ -358,11 +374,11 @@ Car testCarSpeed( Car carState )
 
   int speedStep;
 
-  if( carState.Speed >= maxSpeed)
+  if( carState.Speed >= MAX_SPEED)
   {
     speedStep = -1;
   }
-  else if ( carState.Speed < -maxSpeed)
+  else if ( carState.Speed < -MAX_SPEED)
   {
     speedStep = 1;
   }
@@ -377,6 +393,25 @@ Car testCarSpeed( Car carState )
 
   return carCommand;
 }
+
+/**
+ * Speed Sweep from -255 to 255
+ */
+ void testServoMotor()
+ {
+    int pos;
+    for( pos=ANGLE_TURN_LEFT;pos<=ANGLE_TURN_RIGHT;pos += 1 )
+    {
+      servoFront.write(pos);
+      delay(10);
+    }
+
+    for( pos=ANGLE_TURN_RIGHT;pos>=ANGLE_TURN_LEFT;pos -= 1 )
+    {
+      servoFront.write(pos);
+      delay(10);
+    }
+ }
 
 /**
  * Change Direction each 4096 ms
