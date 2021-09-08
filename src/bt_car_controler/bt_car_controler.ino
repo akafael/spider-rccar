@@ -8,24 +8,20 @@
 // Libraries ------------------------------------------------------------------
 
 #include <Servo.h>
+#include <AFMotor.h>
 #include <elapsedMillis.h>
 
 // Constants ------------------------------------------------------------------
 
 #define PIN_LED 13
-#define PIN_BUZZER 13
-
-#define PIN_MOTOR_BACK_1 5
-#define PIN_MOTOR_BACK_2 6
-#define PIN_MOTOR_BACK_EN 9
-
-#define PIN_MOTOR_FRONT 11
+#define PIN_BUZZER 10
+#define PIN_SERVO_FRONT 9
 
 #define ANGLE_TURN_CENTER 90
 #define ANGLE_TURN_LEFT 50
 #define ANGLE_TURN_RIGHT 110
 
-#define MAX_SPEED 100
+#define MAX_SPEED 100 // Max Value allowed is 127 for 6V output
 
 // Global Vars ----------------------------------------------------------------
 
@@ -35,6 +31,7 @@ elapsedMillis timerLoop;
 const int timeStep = 100; // ms
 
 Servo servoFront;
+AF_DCMotor motorBack(1);
 
 // Car Commands ---------------------------------------------------------------
 
@@ -52,7 +49,7 @@ enum CarCommand : char
   SET_SPEED9 = '9',
   SET_SPEED0 = '0',
 
-  // Move
+  // Movement
   MOVE_FRONT = 'F',
   MOVE_FRONT_LEFT = 'G',
   MOVE_FRONT_RIGHT = 'I',
@@ -62,13 +59,17 @@ enum CarCommand : char
   MOVE_RIGHT = 'L',
   MOVE_LEFT = 'R',
   DO_NOTHING = 'S',
+
+  // Horn
+  PLAY_MUSIC = 'M',
+  STOP_MUSIC = 'X'
 };
 
 enum CarDirection : char
 {
   DIRECTION_RIGHT = 'R',
   DIRECTION_LEFT = 'L',
-  DIRECTION_FRONT = 'F'
+  DIRECTION_CENTER = 'F'
 };
 
 struct Car
@@ -79,9 +80,17 @@ struct Car
   char Direction;
 };
 
+struct Music
+{
+  bool isPlaying;
+  unsigned int noteIndex;
+  int tempo;
+  int melody[];
+};
+
 Car CarState;
 int Speed;
-char state;
+char State;
 
 // Core Functions --------------------------------------------------------------
 
@@ -91,26 +100,22 @@ char state;
 void setup() {
   // Start PIN
   pinMode(PIN_BUZZER, OUTPUT);
-  pinMode(PIN_MOTOR_BACK_1, OUTPUT);
-  pinMode(PIN_MOTOR_BACK_2, OUTPUT);
-  pinMode(PIN_MOTOR_BACK_EN, OUTPUT);
 
   // Turn Motor Off
-  analogWrite(PIN_MOTOR_BACK_1, 0);
-  analogWrite(PIN_MOTOR_BACK_2, 0);
-  analogWrite(PIN_MOTOR_BACK_EN, 0);
+  motorBack.setSpeed( 0 );
+  motorBack.run(RELEASE);
 
   // Start Servo
-  servoFront.attach(PIN_MOTOR_FRONT);
+  servoFront.attach(PIN_SERVO_FRONT);
   servoFront.write(ANGLE_TURN_CENTER);
 
   // Set Car Start Info
   CarState.Speed = 0;
-  CarState.Direction = DIRECTION_FRONT;
+  CarState.Direction = DIRECTION_CENTER;
   CarState.Acceleration = -1;
 
   Speed = MAX_SPEED;
-  state = DO_NOTHING;
+  State = DO_NOTHING;
 
   // Start Communication
   Serial.begin(9600);
@@ -128,11 +133,11 @@ void loop() {
     timerLoop = 0; // Reset Timer
   
     if (Serial.available() > 0) {
-      state  = Serial.read();
-      Serial.write( state );
+      State  = Serial.read();
+      Serial.write( State );
     }
   
-    CarState = driverCommand( state );
+    CarState = driverCommand( State );
     //CarState = driverCommand( DO_NOTHING );
     //CarState = testCarSpeed( CarState );
     
@@ -140,7 +145,7 @@ void loop() {
     setCarSpeed( CarState.Speed );
     setCarDirection( CarState.Direction );
   
-    printInfo( CarState );
+    //printInfo( CarState );
   }
 }
 
@@ -151,17 +156,26 @@ void loop() {
  */
 void setCarDirection( const char direction)
 { 
-  if( direction == DIRECTION_RIGHT )
+  switch( direction )
   {
-    servoFront.write(ANGLE_TURN_RIGHT);
-  }
-  else if( direction == DIRECTION_LEFT )
-  {
-    servoFront.write(ANGLE_TURN_LEFT);
-  }
-  else
-  {
-    servoFront.write(ANGLE_TURN_CENTER);
+    case DIRECTION_RIGHT:
+    {
+       servoFront.write(ANGLE_TURN_RIGHT);
+    }
+    break;
+
+    case DIRECTION_LEFT:
+    {
+       servoFront.write(ANGLE_TURN_LEFT);
+    }
+    break;
+
+    case DIRECTION_CENTER:
+    default:
+    {
+       servoFront.write(ANGLE_TURN_CENTER);
+    }
+    break;
   }
 }
 
@@ -174,21 +188,18 @@ void setCarSpeed( const int speed )
 
   if( speed > 0 )
   {
-    analogWrite(PIN_MOTOR_BACK_1, pwdSignal );
-    analogWrite(PIN_MOTOR_BACK_2, 0 );
-    analogWrite(PIN_MOTOR_BACK_EN, 255 );
+    motorBack.setSpeed( pwdSignal );
+    motorBack.run(FORWARD);
   }
   else if( speed < 0 )
   {
-    analogWrite(PIN_MOTOR_BACK_1, 0 );
-    analogWrite(PIN_MOTOR_BACK_2, pwdSignal );
-    analogWrite(PIN_MOTOR_BACK_EN, 255 );
+    motorBack.setSpeed( pwdSignal );
+    motorBack.run(BACKWARD);
   }
   else
   {
-    analogWrite(PIN_MOTOR_BACK_1, 0 );
-    analogWrite(PIN_MOTOR_BACK_2, 0 );
-    analogWrite(PIN_MOTOR_BACK_EN, 0 );
+    motorBack.setSpeed( 0 );
+    motorBack.run(RELEASE);
   }
 }
 
@@ -274,7 +285,7 @@ Car driverCommand( const char command )
 
     case MOVE_FRONT:
     {
-      carCommand.Direction = DIRECTION_FRONT;
+      carCommand.Direction = DIRECTION_CENTER;
       carCommand.Speed = Speed;
       carCommand.Acceleration = 0;
     }
@@ -314,7 +325,7 @@ Car driverCommand( const char command )
 
     case MOVE_BACK:
     {
-      carCommand.Direction = DIRECTION_FRONT;
+      carCommand.Direction = DIRECTION_CENTER;
       carCommand.Speed = -Speed;
       carCommand.Acceleration = 0;
     }
@@ -339,7 +350,7 @@ Car driverCommand( const char command )
     case DO_NOTHING:
     default:
     {
-      carCommand.Direction = DIRECTION_FRONT;
+      carCommand.Direction = DIRECTION_CENTER;
       carCommand.Speed = 0;
       carCommand.Acceleration = 0;
     }
@@ -389,7 +400,7 @@ Car testCarSpeed( Car carState )
 
   carCommand.Speed = carState.Speed + speedStep;
   carCommand.Acceleration = speedStep;
-  carCommand.Direction = DIRECTION_FRONT;
+  carCommand.Direction = DIRECTION_CENTER;
 
   return carCommand;
 }
